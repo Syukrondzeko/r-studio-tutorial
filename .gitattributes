@@ -1,0 +1,5 @@
+# Normalisasi line ending ke LF untuk semua file teks
+* text=auto eol=lf
+*.R   text eol=lf
+*.csv text eol=lf
+*.md  text eol=lf
