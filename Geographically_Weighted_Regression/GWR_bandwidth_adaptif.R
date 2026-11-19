@@ -1,38 +1,47 @@
-library(spgwr) # Mengaktifkan paket spgwr
-data(columbus,package="spgwr") # Data columbus diambil dari spgwr
+# ==============================================================================
+# Geographically Weighted Regression (GWR) dengan Bandwidth Adaptif
+# ------------------------------------------------------------------------------
+# Channel : https://www.youtube.com/c/ManusiaSetengahChiKuadrat
+# Paket   : spgwr, spData
+# Data    : columbus (dataset dari paket spData)
+# ==============================================================================
 
+library(spgwr)                       # Mengaktifkan paket spgwr
+data(columbus, package = "spData")   # Data columbus (sekarang ada di paket spData)
 head(columbus)
 
-a<-lm(formula = CRIME ~ INC + HOVAL, data = columbus)
+# Regresi global (OLS) sebagai pembanding
+a <- lm(CRIME ~ INC + HOVAL, data = columbus)
 summary(a)
 
-b <- gwr.sel(CRIME ~ INC + HOVAL, 
-             coords=cbind(columbus$x,columbus$y),
-             data=columbus, adapt=TRUE,gweight=gwr.Gauss)
+# Koordinat tiap wilayah
+koordinat <- cbind(columbus$X, columbus$Y)
 
-# Estimasi Parameter
-gwr1 <- gwr(CRIME ~ INC + HOVAL, 
-            coords=cbind(columbus$x,columbus$y),
-            data=columbus, adapt=b,hatmatrix=TRUE,gweight=gwr.Gauss)
+# Pemilihan bandwidth adaptif optimal (kernel Gaussian, kriteria CV)
+b <- gwr.sel(CRIME ~ INC + HOVAL, coords = koordinat,
+             data = columbus, adapt = TRUE, gweight = gwr.Gauss)
 
+# Estimasi parameter
+gwr1 <- gwr(CRIME ~ INC + HOVAL, coords = koordinat,
+            data = columbus, adapt = b, hatmatrix = TRUE, gweight = gwr.Gauss)
 gwr1
 names(gwr1)
 names(gwr1$SDF)
 
-# Menampilkan nilai koefisien beta
-gwr1$SDF$"X.Intercept."
+# Menampilkan nilai koefisien beta di tiap lokasi
+gwr1$SDF$"(Intercept)"
 gwr1$SDF$INC
 gwr1$SDF$HOVAL
 
-# Uji Kecocokan Model
+# Uji kecocokan model (GWR vs OLS)
 BFC02.gwr.test(gwr1)
 
-# Uji Pengaruh Geografis terhadap setiap prediktor
+# Uji pengaruh geografis terhadap setiap prediktor
 LMZ.F3GWR.test(gwr1)
 
-# Melihat nilai bandwidth
+# Melihat nilai bandwidth tiap lokasi
 gwr1$bandwidth
 
-# Menampilkan Nilai koefisien dan nilai prediksi
-gwr1$SDF[,2:4]
-gwr1$SDF[,c(2:4,9,11)]
+# Menampilkan nilai koefisien, nilai prediksi, dan R2 lokal
+hasil <- gwr1$SDF@data   # tabel atribut (nama kolom tetap asli)
+head(hasil[, c("(Intercept)", "INC", "HOVAL", "pred", "localR2")])

@@ -1,43 +1,57 @@
-library(readxl)
-data_anova <- read_excel("C:/Users/HP PC/Downloads/1. Anova/data_anova.xlsx")
-View(data_anova)
-x1=data_anova[c(1:5),1]
-x2=data_anova[c(1:5),2]
-x3=data_anova[c(1:5),3]
-x4=data_anova[c(1:5),4]
-x5=data_anova[c(1:5),5]
+# ==============================================================================
+# ANOVA Satu Arah dari Nol (tanpa paket)
+# ------------------------------------------------------------------------------
+# Channel : https://www.youtube.com/c/ManusiaSetengahChiKuadrat
+# Paket   : - (hanya base R)
+# Data    : data/anova.csv (data dummy, lihat data/generate_dummy_data.R)
+# Catatan : Buka R-Studio-Tutorial.Rproj agar working directory = root repo.
+# ==============================================================================
 
-anova<-function(x1,x2,x3,x4,x5)
-{
-  n1=nrow(x1)
-  n2=nrow(x2)
-  n3=nrow(x3)
-  n4=nrow(x4)
-  n5=nrow(x5)
-  N=n1+n2+n3+n4+n5
-  T1=sum(x1)
-  T2=sum(x2)
-  T3=sum(x3)
-  T4=sum(x4)
-  T5=sum(x5)
-  G=T1+T2+T3+T4+T5
-  JKP=((T1^2/n1)+(T2^2/n2)+(T3^2/n3)+(T4^2/n4)+(T5^2/n5))-(G^2/N)
-  JKT=sum(x1^2,x2^2,x3^2,x4^2,x5^2)-G^2/N
-  JKE=JKT-JKP
-  dk1=4
-  dk2=N-5
-  Fhit=(JKP/dk1)/(JKE/dk2)
-  Ftabel=qf(.99, df1=4, df2=20) 
-  cat("JKP     : ",JKP)
-  cat("\n")
-  cat("JKE     : ",JKE)
-  cat("\n")
-  cat("JKT     : ",JKT)
-  cat("\n")
-  cat("F Hitung: ",Fhit)
-  cat("\n")
-  cat("F Tabel : ",Ftabel)
-  cat("\n")
-  
+data_anova <- read.csv("data/anova.csv")
+data_anova$Perlakuan <- as.factor(data_anova$Perlakuan)
+head(data_anova)
+
+# Pisahkan nilai per perlakuan -> list berisi satu vektor untuk tiap kelompok
+kelompok <- split(data_anova$Nilai, data_anova$Perlakuan)
+kelompok
+
+# Fungsi ANOVA manual. Berlaku untuk berapa pun jumlah perlakuan dan ulangan
+# (derajat bebas dihitung dari data, bukan ditulis manual).
+anova_manual <- function(kelompok, alpha = 0.05) {
+  k   <- length(kelompok)             # banyaknya perlakuan
+  ni  <- sapply(kelompok, length)     # banyaknya ulangan tiap perlakuan
+  N   <- sum(ni)                      # total observasi
+  Ti  <- sapply(kelompok, sum)        # total tiap perlakuan
+  G   <- sum(Ti)                      # total keseluruhan
+
+  JKP <- sum(Ti^2 / ni) - G^2 / N             # jumlah kuadrat perlakuan
+  JKT <- sum(unlist(kelompok)^2) - G^2 / N    # jumlah kuadrat total
+  JKE <- JKT - JKP                            # jumlah kuadrat error
+
+  dk1 <- k - 1                                # db perlakuan
+  dk2 <- N - k                                # db error
+  Fhit   <- (JKP / dk1) / (JKE / dk2)
+  Ftabel <- qf(1 - alpha, df1 = dk1, df2 = dk2)
+  pvalue <- pf(Fhit, dk1, dk2, lower.tail = FALSE)
+
+  cat("JKP      :", JKP, "\n")
+  cat("JKE      :", JKE, "\n")
+  cat("JKT      :", JKT, "\n")
+  cat("db       :", dk1, "dan", dk2, "\n")
+  cat("F Hitung :", Fhit, "\n")
+  cat("F Tabel  :", Ftabel, " (alpha =", alpha, ")\n")
+  cat("p-value  :", pvalue, "\n")
+  if (Fhit > Ftabel) {
+    cat("Keputusan: Tolak H0 -> minimal ada satu perlakuan yang berbeda\n")
+  } else {
+    cat("Keputusan: Gagal tolak H0 -> tidak ada perbedaan antar perlakuan\n")
+  }
+  invisible(list(JKP = JKP, JKE = JKE, JKT = JKT, df = c(dk1, dk2),
+                 F = Fhit, F_tabel = Ftabel, p_value = pvalue))
 }
-anova(x1,x2,x3,x4,x5)
+
+# Di video digunakan taraf signifikansi 1% (alpha = 0.01)
+anova_manual(kelompok, alpha = 0.01)
+
+# Cek: hasilnya harus sama dengan fungsi bawaan R
+summary(aov(Nilai ~ Perlakuan, data = data_anova))

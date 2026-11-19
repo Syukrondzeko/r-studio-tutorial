@@ -1,13 +1,23 @@
+# ==============================================================================
+# Shiny GUI: K-Means Clustering Data Iris (UI)
+# ------------------------------------------------------------------------------
+# Channel : https://www.youtube.com/c/ManusiaSetengahChiKuadrat
+# Paket   : shiny
+# Jalankan: shiny::runApp("Shiny_GUI/Gui_Clustering")
+# ==============================================================================
+
+library(shiny)
+
 vars <- setdiff(names(iris), "Species")
 
 pageWithSidebar(
-  headerPanel('Iris k-means clustering'),
+  headerPanel("Iris k-means clustering"),
   sidebarPanel(
-    selectInput('xcol', 'X Variable', vars),
-    selectInput('ycol', 'Y Variable', vars, selected = vars[[2]]),
-    numericInput('clusters', 'Cluster count', 3, min = 1, max = 9)
+    selectInput("xcol", "X Variable", vars),
+    selectInput("ycol", "Y Variable", vars, selected = vars[[2]]),
+    numericInput("clusters", "Cluster count", 3, min = 1, max = 9)
   ),
   mainPanel(
-    plotOutput('plot1')
+    plotOutput("plot1")
   )
 )

@@ -1,183 +1,171 @@
-library(readxl)
-dataku <- read_excel("F:/Course/youtube/40. mgwr/dataku.xlsx")
-View(dataku)
-library(readr)
-data2 <- read_csv("F:/Course/youtube/40. mgwr/data2.csv")
-coord=data2[,4:5]
+# ==============================================================================
+# Mixed Geographically Weighted Regression (MGWR)
+# ------------------------------------------------------------------------------
+# Channel : https://www.youtube.com/c/ManusiaSetengahChiKuadrat
+# Paket   : spgwr
+# Data    : data/mgwr.csv (data dummy 38 wilayah, lihat data/generate_dummy_data.R)
+# Catatan : Buka R-Studio-Tutorial.Rproj agar working directory = root repo.
+#
+# Model   : Merokok = b0(u,v) + b1(u,v)*Pendidikan + b2(u,v)*Kemiskinan   (lokal)
+#                     + g1*Pria                                         (global)
+# ==============================================================================
 
 library(spgwr)
-adaptgauss=gwr.sel(Merokok~Pendidikan+Pria+Kemiskinan,data=dataku,adapt=TRUE,coords=cbind(coord$U,coord$V),gweight=gwr.Gauss)
-gwr.adaptgauss=gwr(Merokok~Pendidikan+Pria+Kemiskinan,data=dataku,adapt=adaptgauss,coords=cbind(coord$U,coord$V),hatmatrix=TRUE,gweight=gwr.Gauss) 
 
-bw=gwr.adaptgauss$bandwidth
-y=as.matrix(dataku$Merokok)
-lat=as.matrix(coord$U)
-lon=as.matrix(coord$V)
-xl=as.matrix(cbind(dataku$Pendidikan,dataku$Kemiskinan))
-xg=as.matrix(dataku$Pria)
-x=as.matrix(cbind(xl,xg)) 
+dataku <- read.csv("data/mgwr.csv")
+head(dataku)
+coord <- cbind(dataku$U, dataku$V)
 
+# Trace matriks (pengganti psych::tr) dan trace dari kuadrat matriks, tr(A %*% A)
+tr  <- function(A) sum(diag(A))
+tr2 <- function(A) sum(A * t(A))
 
-ng=ncol(xg) 
-nl=ncol(xl) 
-n=length(y)
+# ------------------------------------------------------------------------------
+# 1. Bandwidth adaptif (kernel Gaussian) dari model GWR penuh
+# ------------------------------------------------------------------------------
+adaptgauss <- gwr.sel(Merokok ~ Pendidikan + Pria + Kemiskinan, data = dataku,
+                      adapt = TRUE, coords = coord, gweight = gwr.Gauss)
+gwr.adaptgauss <- gwr(Merokok ~ Pendidikan + Pria + Kemiskinan, data = dataku,
+                      adapt = adaptgauss, coords = coord, hatmatrix = TRUE,
+                      gweight = gwr.Gauss)
+gwr.adaptgauss
+bw <- gwr.adaptgauss$bandwidth   # satu bandwidth untuk tiap lokasi
 
-I=diag(1,n,n) 
-W=matrix(0,n,n) 
-d=matrix(0,n,n) 
-for (i in 1:n){
-  for (j in 1:n)
-  {
-    d[i,j]=sqrt((lat[i,1]-lat[j,1])^2+(lon[i,1]-lon[j,1])^2) 
-    if (d[i,j] > bw[i]){
-      W[i,j]=0
-    }else
-      W[i,j]=1-((d[i,j]/bw[i])^2)^2
-  }
+# ------------------------------------------------------------------------------
+# 2. Variabel respon, prediktor lokal (xl), dan prediktor global (xg)
+# ------------------------------------------------------------------------------
+y   <- as.matrix(dataku$Merokok)
+lat <- dataku$U
+lon <- dataku$V
+xl  <- cbind(Intercept = 1, Pendidikan = dataku$Pendidikan,
+             Kemiskinan = dataku$Kemiskinan)
+xg  <- cbind(Pria = dataku$Pria)
+x   <- cbind(xl, xg)
+
+ng <- ncol(xg)
+nl <- ncol(xl)
+n  <- length(y)
+I  <- diag(1, n, n)
+
+# ------------------------------------------------------------------------------
+# 3. Matriks pembobot: baris i = bobot semua observasi untuk lokasi i.
+#    Kernel Gaussian, sama dengan kernel yang dipakai saat memilih bandwidth.
+# ------------------------------------------------------------------------------
+d <- as.matrix(dist(cbind(lat, lon)))
+W <- matrix(0, n, n)
+for (i in 1:n) {
+  W[i, ] <- exp(-0.5 * (d[i, ] / bw[i])^2)
 }
-beta.l=matrix(0,nl,n) 
-Sl=matrix(0,n,n)
-for (i in 1:n){
-  Sl[i,]=((xl[i,]%*%(solve((t(xl)%*%diag(W[,i]))%*%xl)))%*%t(xl))%*%diag(W[,i])
+
+# ------------------------------------------------------------------------------
+# 4. Estimasi parameter
+# ------------------------------------------------------------------------------
+Sl <- matrix(0, n, n)
+for (i in 1:n) {
+  Wi <- diag(W[i, ])
+  Sl[i, ] <- xl[i, ] %*% solve(t(xl) %*% Wi %*% xl) %*% t(xl) %*% Wi
 }
 
-beta.g=((((solve(((t(xg)%*%t(I-Sl))%*%(I-Sl))%*%xg))%*%t(xg))%*%t(I-Sl))%*%(I-Sl))%*%y 
+ISl  <- t(I - Sl) %*% (I - Sl)
+beta.g <- solve(t(xg) %*% ISl %*% xg) %*% t(xg) %*% ISl %*% y
 
-for(i in 1:n){
-  beta.l[,i]=((solve((t(xl)%*%diag(W[,i]))%*%xl)%*%t(xl)%*%diag(W[,i]))%*%(y-(xg%*%beta.g)))
+beta.l <- matrix(0, nl, n, dimnames = list(colnames(xl), dataku$Wilayah))
+for (i in 1:n) {
+  Wi <- diag(W[i, ])
+  beta.l[, i] <- solve(t(xl) %*% Wi %*% xl) %*% t(xl) %*% Wi %*% (y - xg %*% beta.g)
 }
 
-Sg=(xg%*%solve(t(xg)%*%xg))%*%t(xg)
-S=Sl+((((((I-Sl)%*%xg)%*%solve(((t(xg)%*%t(I-Sl))%*%(I-Sl))%*%xg))%*%t(xg))%*%t(I-Sl))%*%(I-Sl)) 
-y.hat=S%*%y
-residual=(y-y.hat)
-H=(x%*%solve(t(x)%*%x))%*%t(x) 
+Sg <- xg %*% solve(t(xg) %*% xg) %*% t(xg)
+S  <- Sl + (I - Sl) %*% xg %*% solve(t(xg) %*% ISl %*% xg) %*% t(xg) %*% ISl
+y.hat    <- S %*% y
+residual <- y - y.hat
+H <- x %*% solve(t(x) %*% x) %*% t(x)   # hat matrix regresi global (OLS)
 
-v=c(0,0)
-u=c(0,0)
-r=c(0,0)
-t=c(0,0)
-library(psych)
-for(i in 1:2){
-  v[i]=tr(((I-H)-(t(I-S)%*%(I-S)))^i) 
-  u[i]=tr((t(I-S)%*%(I-S))^i)
-  r[i]=tr((t(I-Sl)%*%(I-Sl)-t(I-S)%*%(I-S))^i)
-  t[i]=tr((t(I-Sg)%*%(I-Sg)-t(I-S)%*%(I-S))^i)
-} 
+# ------------------------------------------------------------------------------
+# 5. Uji serentak
+#    F1: MGWR vs regresi global (OLS)
+#    F2: signifikansi variabel global
+#    F3: signifikansi variabel lokal
+# ------------------------------------------------------------------------------
+IS  <- t(I - S) %*% (I - S)
+A1  <- (I - H) - IS
+A2  <- t(I - Sl) %*% (I - Sl) - IS
+A3  <- t(I - Sg) %*% (I - Sg) - IS
+v   <- c(tr(A1), tr2(A1))
+u   <- c(tr(IS), tr2(IS))
+r   <- c(tr(A2), tr2(A2))
+tt  <- c(tr(A3), tr2(A3))
 
+RSS.H1 <- as.vector(t(y) %*% IS %*% y)
+F1 <- as.vector((t(y) %*% A1 %*% y) / v[1]) / (RSS.H1 / u[1])
+F2 <- as.vector((t(y) %*% A2 %*% y) / r[1]) / (RSS.H1 / u[1])
+F3 <- as.vector((t(y) %*% A3 %*% y) / tt[1]) / (RSS.H1 / u[1])
+df1 <- c(v[1]^2 / v[2], r[1]^2 / r[2], tt[1]^2 / tt[2])
+df2 <- u[1]^2 / u[2]
+Fgab <- c(F1, F2, F3)
+p.value <- pf(Fgab, df1 = df1, df2 = df2, lower.tail = FALSE)
+Uji.Serentak <- data.frame(F = Fgab, df1 = df1, df2 = df2, p.value = p.value,
+                           row.names = c("F1", "F2", "F3"))
 
-F1=as.vector((((t(y)%*%((I-H)-(t(I-S)%*%(I- S))))%*%y)/v[1])/((((t(y)%*%t(I-S))%*%(I-S))%*%y)/u[1]))
-df1.1=(v[1]^2/v[2])
-df2=(u[1]^2)/u[2]
-F2=as.vector((((t(y)%*%(((t(I-Sl)%*%(I-Sl))-(t(I-S)%*%(I-S)))))%*%y)/r[1])/((((t(y)%*%t(I-S))%*%(I-S))%*%y)/u[1]))
-df1.2=(r[1]^2/r[2])
-F3=as.vector((((t(y)%*%(((t(I-Sg)%*%(I-Sg))-(t(I-S)%*%(I-S)))))%*%y)/t[1])/((((t(y)%*%t(I-S))%*%(I-S))%*%y)/u[1]))
-df1.3=(t[1]^2/t[2]) 
-Fgab=as.vector(rbind(F1,F2,F3)) 
-df1=c(df1.1,df1.2,df1.3) 
-p.value=as.vector(matrix(0,3,1)) 
-for(i in 1:3){
-  p.value[i]=1-(pf(Fgab[i], df1=df1[i], df2=df2))
+# ------------------------------------------------------------------------------
+# 6. Uji parsial variabel global (uji t dua sisi)
+# ------------------------------------------------------------------------------
+G     <- solve(t(xg) %*% ISl %*% xg) %*% t(xg) %*% ISl
+gkk   <- diag(G %*% t(G))
+sigma <- sqrt(RSS.H1 / n)
+t.g   <- as.vector(beta.g) / (sigma * sqrt(gkk))
+p.val <- 2 * pt(-abs(t.g), df = df2)
+Uji.Parsial.Global <- data.frame(beta = as.vector(beta.g), t = t.g, df = df2,
+                                 p.value = p.val, row.names = colnames(xg))
+
+# ------------------------------------------------------------------------------
+# 7. Uji parsial variabel lokal di tiap lokasi (uji t dua sisi)
+# ------------------------------------------------------------------------------
+t.hit.l <- matrix(0, nl, n, dimnames = dimnames(beta.l))
+pvalue  <- matrix(0, nl, n, dimnames = dimnames(beta.l))
+for (i in 1:n) {
+  Wi <- diag(W[i, ])
+  M  <- solve(t(xl) %*% Wi %*% xl) %*% t(xl) %*% Wi %*% (I - xg %*% G)
+  m  <- diag(M %*% t(M))
+  t.hit.l[, i] <- beta.l[, i] / (sigma * sqrt(m))
+  pvalue[, i]  <- 2 * pt(-abs(t.hit.l[, i]), df = df2)
 }
-Uji.Serentak=cbind(Fgab,df1,df2,p.value) 
+ringkasan <- data.frame(Wilayah = dataku$Wilayah,
+                        t(beta.l),
+                        t = t(t.hit.l),
+                        p = t(pvalue))
 
+# ------------------------------------------------------------------------------
+# 8. Selisih jumlah kuadrat residual (RSS) tiap hipotesis
+# ------------------------------------------------------------------------------
+RSS.H0 <- c(F1 = as.vector(t(y) %*% (I - H) %*% y),
+            F2 = as.vector(t(y) %*% t(I - Sl) %*% (I - Sl) %*% y),
+            F3 = as.vector(t(y) %*% t(I - Sg) %*% (I - Sg) %*% y))
+DSS <- RSS.H0 - RSS.H1
 
-G=((solve(((t(xg)%*%t(I-Sl))%*%(I-Sl))%*%xg)%*%t(xg))%*%t(I-Sl))%*%(I-Sl) 
-gkk=diag(G%*%t(G)) 
-t.g=as.vector(matrix(0,ng,1)) 
-p.val=as.vector(matrix(0,ng,1))
-sigma=as.vector(sqrt(((((t(y)%*%t(I-S))%*%(I-S))%*%y)/n)))
-for(i in 1:ng){
-  t.g[i]=beta.g[i]/(sigma*sqrt(gkk[i])) 
-  df=df2
-  p.val[i]=pt(t.g[i], df=df)
-}
-Uji.Parsial.Global=cbind(t.g,df,p.val) 
+# ------------------------------------------------------------------------------
+# 9. Kebaikan model: AIC, AICc, R-squared, dan adjusted R-squared
+# ------------------------------------------------------------------------------
+AICc <- 2 * n * log(sigma) + n * log(2 * pi) + n * (n + tr(S)) / (n - 2 - tr(S))
+AIC  <- 2 * n * log(sigma) + n * log(2 * pi) + n + tr(S)
+RSS  <- sum(residual^2)
+TSS  <- sum((y - mean(y))^2)
+rsqrt <- 1 - RSS / TSS                                   # R-squared
+rbar  <- 1 - (RSS / (n - ng - nl)) / (TSS / (n - 1))     # adjusted R-squared
 
+# ------------------------------------------------------------------------------
+# Hasil
+# ------------------------------------------------------------------------------
 beta.g
-beta.l
-Uji.Serentak 
-Uji.Parsial.Global 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-#============================================================
-RSS.H0.F1=as.vector(((t(y)%*%(I-H))%*%y))
-RSS.H0.F2=as.vector((((t(y)%*%(t(I-Sl)))%*%(I-Sl))%*%y))
-RSS.H0.F3=as.vector((((t(y)%*%(t(I-Sg)))%*%(I-Sg))%*%y)) 
-RSS.H0=cbind(RSS.H0.F1,RSS.H0.F2,RSS.H0.F3) 
-RSS.H1=as.vector((((t(y)%*%(t(I-S)))%*%(I-S))%*%y)) 
-DSS1=RSS.H0.F1-RSS.H1
-DSS2=RSS.H0.F2-RSS.H1 
-DSS3=RSS.H0.F3-RSS.H1 
-DSS=cbind(DSS1,DSS2,DSS3) 
-
-sigma=as.vector(sqrt(((((t(y)%*%t(I-S))%*%(I-S))%*%y)/n))) 
-t.hit.l=matrix(0,nl,n) 
-pvalue=matrix(0,nl,n) 
-ringkasan=matrix(0,n,2*nl) 
-for(i in 1:n){
-  M=((((solve(((t(xl)%*%diag(W[,i]))%*%xl)))%*%t(xl))%*%diag(W[,i]))%*%(I-(xg%*%G)))
-  m=diag(M%*%t(M))
-  m=as.matrix(m)
-  for (j in 1:nl)
-  {
-    t.hit.l[j,i]=beta.l[j,i]/(sigma*(sqrt(m[j,]))) 
-    pvalue[j,i]=pt(t.hit.l[j,i],df=df2,lower.tail=TRUE)
-  }
-  ringkasan[i,]=t(cbind(t.hit.l[,i],pvalue[,i]))
-}
-#nilai t, nilai pval, dst# 
-AICc=(2*n*log(sigma))+(n*log(2*pi))+((n*((n+tr(S)))/(n-2- tr(S))))
-AIC=(2*n*log(sigma))+(n*log(2*pi))+n+tr(S) 
-resid=y-y.hat
-sigu=(t(resid))%*%resid 
-ym=y-mean(y) 
-rsqrt1=sigu
-rsqrt2=t(ym)%*%ym
-rsqrt=1-(rsqrt1/rsqrt2) #r-squared# rsqrt1=rsqrt1/(n-ng-nl) rsqrt2=rsqrt2/(n-1)
-rbar=1-(rsqrt1/rsqrt2) #rbar-squared# bw
-
-ringkasan
-AICc 
-AIC
-rsqrt 
-rbar
-
-lat
-lon
-xl
-xg
-x
-Sl
-Sg
-S
-W
-RSS.H0 
-RSS.H1 
+head(t(beta.l))
+Uji.Serentak
+Uji.Parsial.Global
+head(ringkasan)
+RSS.H0
+RSS.H1
 DSS
-
+AICc
+AIC
+rsqrt
+rbar
+# Matriks lain (W, Sl, Sg, S, H) tersedia di Environment bila ingin diperiksa.

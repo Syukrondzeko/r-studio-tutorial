@@ -1,27 +1,38 @@
+# ==============================================================================
+# Auto ARIMA (pemilihan orde ARIMA otomatis)
+# ------------------------------------------------------------------------------
+# Channel : https://www.youtube.com/c/ManusiaSetengahChiKuadrat
+# Paket   : forecast
+# Data    : data/auto_arima.csv (data dummy harga saham, lihat
+#           data/generate_dummy_data.R)
+# Catatan : Buka R-Studio-Tutorial.Rproj agar working directory = root repo.
+#           Dokumentasi fungsi: ?forecast::auto.arima
+# ==============================================================================
+
 library(forecast)
-library(readxl)
 
-?auto.arima
-Data <- read_excel("F:/Course/youtube/27.Auto.arima/Data_Auto_Arima.xlsx")
-tsdata=ts(Data$WSKT)
-
-str(Data$TLKM)
+Data <- read.csv("data/auto_arima.csv")
+head(Data)
+tsdata <- ts(Data$WSKT)
 str(tsdata)
-
 plot(tsdata)
-model=auto.arima(tsdata)
+
+model <- auto.arima(tsdata)
 model
 
-#forecasting
-prediksi=forecast(model,h=7)
+# Peramalan 7 periode ke depan
+prediksi <- forecast(model, h = 7)
 prediksi
 
-#plot hasil prediksi
+# Plot hasil prediksi
 plot(prediksi)
-#cek besaran nilai residual
+
+# Cek residual
 plot(prediksi$residuals)
-#cek asumsi
 qqnorm(prediksi$residuals)
-#cek akurasi
+qqline(prediksi$residuals)
+checkresiduals(model)
+
+# Cek akurasi
 summary(model)
 accuracy(model)

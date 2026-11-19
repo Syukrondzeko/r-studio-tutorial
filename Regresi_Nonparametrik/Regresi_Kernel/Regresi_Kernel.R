@@ -1,40 +1,48 @@
-library(readxl)
-dataku <- read_excel("F:/Course/youtube/19. Regresi Kernel/dataku.xlsx")
-View(dataku)
-dataku <- dataku[order(dataku$kurs),]
-X=dataku$kurs
-Y=dataku$lq45
+# ==============================================================================
+# Regresi Nonparametrik Kernel (Estimator Nadaraya-Watson)
+# ------------------------------------------------------------------------------
+# Channel : https://www.youtube.com/c/ManusiaSetengahChiKuadrat
+# Paket   : - (hanya base R)
+# Data    : data/regresi_kernel.csv (data dummy kurs vs LQ45,
+#           lihat data/generate_dummy_data.R)
+# Catatan : Buka R-Studio-Tutorial.Rproj agar working directory = root repo.
+# ==============================================================================
 
-gh1=function(hopt,X,Y)
-{
-  g <- length(X)
-  Ghat <- rep(0, g)
+source("Regresi_Nonparametrik/helpers/kernel.R")        # fungsi ker()
+source("Regresi_Nonparametrik/Regresi_Kernel/GCV.R")    # fungsi gcv()
+source("Regresi_Nonparametrik/Regresi_Kernel/CV.R")     # fungsi cv1()
+
+dataku <- read.csv("data/regresi_kernel.csv")
+dataku <- dataku[order(dataku$kurs), ]
+head(dataku)
+X <- dataku$kurs
+Y <- dataku$lq45
+
+# Estimasi Nadaraya-Watson dengan bandwidth hopt, lalu plot hasilnya
+gh1 <- function(hopt, X, Y) {
   n <- length(Y)
-  for(j in 1:g) {
-    ghat <- 0
-    faktor <- 0
-    for(i in 1:n) {
-      faktor <- faktor + ker((X[j] - X[i])/hopt)
-      ghat <- ghat + Y[i] * ker((X[j] - X[i])/hopt)
-    }
-    if(faktor==0)Ghat[j]=0
-    else Ghat[j] <- ghat/faktor
+  Ghat <- numeric(n)
+  for (j in 1:n) {
+    bobot  <- ker((X[j] - X) / hopt)
+    faktor <- sum(bobot)
+    Ghat[j] <- if (faktor == 0) 0 else sum(bobot * Y) / faktor
   }
-  Gh=matrix(Ghat,ncol=1)
-  plot(X,Y,xlim = c(min(X), max(X)), ylim = c(min(Y),max(Y)),xlab = "Kurs Rupiah", ylab =  "LQ45")
-  par(new = T)
-  lines(X, Gh, xlim = c(min(X), max(X)),  ylim = c(min(Y),max(Y)),  xlab = "", ylab = "",col=2)
-  #plot(X, Ghat, xlim = c(min(X), max(X)), ylim = c(4900,5300),  xlab = "", ylab = "",type="l",col=2)
-  Gh
+  plot(X, Y, xlab = "Kurs Rupiah", ylab = "LQ45")
+  lines(X, Ghat, col = 2, lwd = 2)
+  matrix(Ghat, ncol = 1)
 }
 
+# 1. Cari bandwidth optimal dengan GCV pada rentang yang lebar
+hop <- gcv(X, Y, a = 10, b = 500, c = 10)
+plot(hop$tabel[, "h"], hop$tabel[, "GCV"], xlab = "h", ylab = "GCV", type = "l")
 
-mdata=as.matrix(dataku)
-hop <- np.gcv(mdata)
-plot(hop$h.seq, hop$GCV, xlab="h", ylab="GCV", type="l")
-hop2 <- np.gcv(mdata,h.seq=seq(10, 50, 1))
-plot(hop2$h.seq, hop2$GCV, xlab="h", ylab="GCV", type="l")
-#np.cv(data = data, h.seq = NULL, num.h = 50, w = NULL, num.ln = 1,ln.0 = 0, step.ln = 2, estimator = "NW", kernel = "quadratic")
+# 2. Perhalus pencarian di sekitar h optimal
+hop2 <- gcv(X, Y, a = max(1, hop$h.opt - 20), b = hop$h.opt + 20, c = 1)
+plot(hop2$tabel[, "h"], hop2$tabel[, "GCV"], xlab = "h", ylab = "GCV", type = "l")
 
-gh1(hop$h.opt,X,Y)
+# Pembanding: bandwidth optimal menurut Cross Validation
+hop_cv <- cv1(X, Y, a = max(1, hop$h.opt - 20), b = hop$h.opt + 20, c = 1)
 
+# 3. Estimasi dengan bandwidth optimal
+hasil <- gh1(hop2$h.opt, X, Y)
+head(hasil)

@@ -1,53 +1,73 @@
-library(markdown)
+# ==============================================================================
+# Shiny GUI: Upload Data CSV dan Regresi Linier (UI)
+# ------------------------------------------------------------------------------
+# Channel : https://www.youtube.com/c/ManusiaSetengahChiKuadrat
+# Paket   : shiny, shinythemes
+# Jalankan: shiny::runApp("Shiny_GUI/Gui_Regresi")
+#           Contoh file untuk diupload: data/mall_customers.csv
+# ==============================================================================
 
-ui <- fluidPage(theme = shinytheme("cerulean"),
-navbarPage("Navbar!",
-           tabPanel("Plot",
-                    sidebarLayout(
-                      sidebarPanel(
-                        # Input: Select a file ----
-                        fileInput("file1", "Choose CSV File",
-                                  multiple = FALSE,
-                                  accept = c("text/csv",
-                                             "text/comma-separated-values,text/plain",
-                                             ".csv")),
-                        
-                        # Horizontal line ----
-                        tags$hr(),
-                        
-                        # Input: Checkbox if file has header ----
-                        checkboxInput("header", "Header", TRUE),
-                        
-                        # Input: Select separator ----
-                        radioButtons("sep", "Separator",
-                                     choices = c(Comma = ",",
-                                                 Semicolon = ";",
-                                                 Tab = "\t"),
-                                     selected = ","),
-                        
-                        # Input: Select quotes ----
-                        radioButtons("quote", "Quote",
-                                     choices = c(None = "",
-                                                 "Double Quote" = '"',
-                                                 "Single Quote" = "'"),
-                                     selected = '"'),
-                        
-                        # Horizontal line ----
-                        tags$hr(),
-                        
-                        # Input: Select number of rows to display ----
-                        radioButtons("disp", "Display",
-                                     choices = c(Head = "head",
-                                                 All = "all"),
-                                     selected = "head")
-                      ),
-                      mainPanel(
-                        tableOutput("contents")
-                      )
-                    )
-           ),
-           tabPanel("Summary",
-                    verbatimTextOutput("summ")
-           )
-)      
+library(shiny)
+library(shinythemes)
+
+fluidPage(
+  theme = shinytheme("cerulean"),
+  navbarPage(
+    "GUI Regresi",
+    tabPanel(
+      "Data",
+      sidebarLayout(
+        sidebarPanel(
+          # Input: pilih file ----
+          fileInput("file1", "Choose CSV File",
+                    multiple = FALSE,
+                    accept = c("text/csv",
+                               "text/comma-separated-values,text/plain",
+                               ".csv")),
+          tags$hr(),
+
+          # Input: apakah file memiliki header ----
+          checkboxInput("header", "Header", TRUE),
+
+          # Input: pemisah kolom ----
+          radioButtons("sep", "Separator",
+                       choices = c(Comma = ",", Semicolon = ";", Tab = "\t"),
+                       selected = ","),
+
+          # Input: tanda kutip ----
+          radioButtons("quote", "Quote",
+                       choices = c(None = "", "Double Quote" = '"',
+                                   "Single Quote" = "'"),
+                       selected = '"'),
+          tags$hr(),
+
+          # Input: jumlah baris yang ditampilkan ----
+          radioButtons("disp", "Display",
+                       choices = c(Head = "head", All = "all"),
+                       selected = "head")
+        ),
+        mainPanel(
+          tableOutput("contents")
+        )
+      )
+    ),
+    tabPanel(
+      "Summary",
+      verbatimTextOutput("summ")
+    ),
+    tabPanel(
+      "Regresi",
+      sidebarLayout(
+        sidebarPanel(
+          selectInput("y_var", "Variabel respon (Y)", choices = NULL),
+          selectInput("x_var", "Variabel prediktor (X)", choices = NULL,
+                      multiple = TRUE)
+        ),
+        mainPanel(
+          verbatimTextOutput("model"),
+          plotOutput("diagnostik")
+        )
+      )
+    )
+  )
 )

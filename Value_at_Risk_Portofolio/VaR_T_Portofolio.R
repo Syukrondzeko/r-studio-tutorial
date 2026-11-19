@@ -1,43 +1,47 @@
-library(readxl)
-Data_Mentah <- read_excel("C:/Users/HP PC/Downloads/6. VaR Portofolio Normal, T, dan Historical Simulation/Data_VaR.xlsx")
-View(Data_Mentah)
-Data_VaR=Data_Mentah[2:40,c(3,5,7)]
-View(Data_VaR)
+# ==============================================================================
+# Value at Risk (VaR) Portofolio: Distribusi t-Student
+# ------------------------------------------------------------------------------
+# Channel : https://www.youtube.com/c/ManusiaSetengahChiKuadrat
+# Paket   : - (hanya base R)
+# Data    : data/var_saham.csv (data dummy return saham TLKM, WSKT, UNVR,
+#           lihat data/generate_dummy_data.R)
+# Catatan : Buka R-Studio-Tutorial.Rproj agar working directory = root repo.
+# ==============================================================================
 
-TLKM=Data_VaR[,1]
-WSKT=Data_VaR[,2]
-UNVR=Data_VaR[,3]
+Data_Mentah <- read.csv("data/var_saham.csv")
+head(Data_Mentah)
 
-v1=var(TLKM)
-v2=var(WSKT)
-v3=var(UNVR)
+# Ambil kolom return. Baris pertama dibuang karena return-nya NA
+# (belum ada harga periode sebelumnya).
+Data_VaR <- na.omit(Data_Mentah[, c("r_TLKM", "r_WSKT", "r_UNVR")])
+head(Data_VaR)
 
-v12=cov(TLKM,WSKT)
-v13=cov(TLKM,UNVR)
-v23=cov(WSKT,UNVR)
+# Bobot portofolio dengan metode minimum variance:
+# w = (Sigma^-1 * 1) / (1' * Sigma^-1 * 1)
+Sigma <- cov(Data_VaR)
+Sigma
+satu  <- matrix(1, nrow = ncol(Data_VaR))
+mh    <- solve(Sigma) %*% satu
+w     <- as.vector(mh / sum(mh))
+names(w) <- c("TLKM", "WSKT", "UNVR")
+w          # jumlah bobot = 1
 
-m=matrix(c(v1,v12,v13,v12,v2,v23,v13,v23,v3), nrow = 3, ncol = 3)
-library(matlib)
-mi=inv(m)
-m1=matrix(c(1,1,1),nrow=3)
-mh=mi%*%m1
-total=colSums (mh, dims = 1)
-w1=mh[1,1]/total
-w2=mh[2,1]/total
-w3=mh[3,1]/total
+# Return portofolio
+Data_VaR$rportof <- as.vector(as.matrix(Data_VaR[, 1:3]) %*% w)
+head(Data_VaR)
 
-Data_VaR$rportof=w1*Data_VaR$`r(TLKM)`+w2*Data_VaR$`r(WSKT)`+w3*Data_VaR$`r(UNVR)`
-View(Data_VaR)
+data <- Data_VaR$rportof
+n <- length(data)
 
-data=Data_VaR$rportof
-n=length(data)
+alpha <- 0.05      # tingkat kepercayaan 95%
+hp    <- 1         # holding period (periode)
+modal <- 1000000   # modal investasi (Rp)
+m <- mean(data)
+s <- sd(data)
 
-#VaR T
-m=mean(data)
-s=sd(data)
-z=qnorm(0.05)
-t=qt(0.05,n)
-hp=1
-modal=1000000
-
-VaR_T = -(modal*sqrt(hp)*t*s*sqrt((n-2)/n))
+# VaR distribusi t-Student dengan derajat bebas n - 1.
+# Faktor sqrt((df - 2) / df) menyesuaikan simpangan baku ke skala distribusi t.
+df <- n - 1
+t  <- qt(alpha, df)
+VaR_T <- -(modal * sqrt(hp) * t * s * sqrt((df - 2) / df))
+cat("VaR t-Student", (1 - alpha) * 100, "% :", VaR_T, "\n")
